@@ -1,0 +1,87 @@
+version: '3.9'
+
+networks:
+  deploy-net:
+    driver: bridge
+
+services:
+  registrator:
+    build:
+      context: ./Registrator/
+      dockerfile: Dockerfile
+    ports:
+      - "5000:80"
+    networks:
+      - deploy-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=DevDb;Username=postgres;Password=123"
+      ConnectionStrings__Redis: "redis:6379"
+      ConnectionStrings__RabbitMq : "rabbit_mq"
+    depends_on:
+      - db
+      - redis
+      - rabbit_mq
+    restart: always
+
+  mailsender:
+    build:
+      context: ./MailSender/
+      dockerfile: Dockerfile
+    ports:
+      - "4999:80"
+    networks:
+      - deploy-net
+    command: rabbit_mq 
+    depends_on:
+      - rabbit_mq
+    restart: always
+
+  reactclient:
+    build:
+      context: ./pixlpark-test-front/
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    networks:
+      - deploy-net
+    depends_on:
+      - registrator
+      - rabbit_mq
+    restart: always
+
+  db:
+    container_name: db
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    networks:
+      - deploy-net
+    environment:
+      POSTGRES_PASSWORD: 123
+      POSTGRES_USER: postgres
+      POSTGRES_DB: DevDb
+    restart: always
+
+  redis:
+    container_name: redis
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    networks:
+      - deploy-net
+    restart: always
+
+  rabbit_mq:
+    container_name: rabbit_mq
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - deploy-net
+    expose:
+      - 15672
+      - 5672
+    restart: always
